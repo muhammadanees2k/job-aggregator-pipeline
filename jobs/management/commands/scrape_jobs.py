@@ -93,41 +93,63 @@ class Command(BaseCommand):
         all_jobs = []
 
         with sync_playwright() as p:
-            # HEADLESS MUST BE TRUE FOR LINUX DEPLOYMENT
-            browser = p.chromium.launch(headless=True, slow_mo=300)
+            # 1. THE STEALTH LAUNCH
+            browser = p.chromium.launch(
+                headless=True, 
+                slow_mo=300,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            
+            # 2. THE HUMAN MASK (USER AGENT)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080}
+            )
 
-            # 1. Scrape Devsinc
+            # 3. SCRAPE DEVSINC
             self.stdout.write("--> Scraping Devsinc...")
             try:
-                devsinc_jobs = self.scrape_devsinc(browser)
+                devsinc_jobs = self.scrape_devsinc(context)
                 all_jobs.extend(devsinc_jobs)
                 self.stdout.write(self.style.SUCCESS(f"Found {len(devsinc_jobs)} Devsinc jobs."))
             except Exception as e:
                 self.stderr.write(self.style.ERROR(f"Devsinc Scraper Failed: {e}"))
                 traceback.print_exc()
 
-            # 2. Scrape Systems Limited
+            # 4. SCRAPE SYSTEMS LIMITED
             self.stdout.write("--> Scraping Systems Limited...")
             try:
-                systems_jobs = self.scrape_systems_limited(browser)
+                systems_jobs = self.scrape_systems_limited(context)
                 all_jobs.extend(systems_jobs)
                 self.stdout.write(self.style.SUCCESS(f"Found {len(systems_jobs)} Systems Limited jobs."))
             except Exception as e:
                 self.stderr.write(self.style.ERROR(f"Systems Limited Scraper Failed: {e}"))
                 traceback.print_exc()
 
+            context.close()
             browser.close()
 
-        # 3. Database Operations
+        # 5. DATABASE OPERATIONS
         self.save_to_database(all_jobs)
         self.clean_up_dead_links()
 
-    def scrape_devsinc(self, browser):
+    def scrape_devsinc(self, context):
         URL = "https://apply.workable.com/devsinc-17/"
         COMPANY_NAME = "Devsinc"
-        page = browser.new_page()
-        page.goto(URL, wait_until="networkidle")
-        page.wait_for_selector("[data-ui='job']", timeout=15000)
+        page = context.new_page()
+        
+        # =========================================================
+        # THE CAMERA: Takes a screenshot if the firewall blocks us
+        # =========================================================
+        try:
+            page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_selector("[data-ui='job']", timeout=30000)
+        except TimeoutError:
+            self.stdout.write(self.style.WARNING("--> Capturing screenshot of the block..."))
+            page.screenshot(path="devsinc_blocked.png")
+            page.close()
+            raise Exception("Timeout! Saved screenshot to devsinc_blocked.png")
+        # =========================================================
 
         try:
             accept_btn = page.get_by_role("button", name="Accept all")
@@ -177,7 +199,6 @@ class Command(BaseCommand):
                     posted_date = line
                     break
 
-            # Skip bad records
             if not apply_link or not job_title:
                 continue
 
@@ -190,14 +211,14 @@ class Command(BaseCommand):
 
         return jobs_data
 
-    def scrape_systems_limited(self, browser):
+    def scrape_systems_limited(self, context):
         URL = "https://career55.sapsf.eu/career?company=systemvent&lang=en_US"
         COMPANY_NAME = "Systems Limited"
         BASE_URL = "https://career55.sapsf.eu"
         jobs_data = []
 
-        page = browser.new_page()
-        page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+        page = context.new_page()
+        page.goto(URL, wait_until="domcontentloaded", timeout=90000)
         page.wait_for_selector("#careerJobSearchContainer", timeout=60000)
         
         for attempt in range(30):
@@ -219,7 +240,6 @@ class Command(BaseCommand):
             pass
 
         while True:
-            # Scrape Current Page Logic integrated here
             html = page.content()
             soup = BeautifulSoup(html, "html.parser")
             job_items = soup.select("tr.jobResultItem")
@@ -249,7 +269,6 @@ class Command(BaseCommand):
                         except Exception:
                             pass
                 
-                # Skip bad records
                 if not apply_link or not job_title:
                     continue
 
@@ -296,10 +315,8 @@ class Command(BaseCommand):
         self.stdout.write("--> Cleaning up dead links...")
         yesterday = timezone.now() - timezone.timedelta(hours=24)
         
-        # Find jobs not seen in the last 24 hours
         stale_jobs = Job.objects.filter(last_seen__lt=yesterday, is_active=True)
         stale_count = stale_jobs.count()
         
-        # Deactivate them
         stale_jobs.update(is_active=False)
         self.stdout.write(self.style.SUCCESS(f"Deactivated {stale_count} old/removed jobs."))

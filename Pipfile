@@ -8,6 +8,9 @@ django = "*"
 mysqlclient = "*"
 djangorestframework = "*"
 django-filter = "*"
+playwright = "*"
+dotenv = "*"
+beautifulsoup4 = "*"
 
 [dev-packages]
 

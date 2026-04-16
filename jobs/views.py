@@ -8,7 +8,7 @@ from .models import Job
 from .serializers import JobSerializer
 
 class JobViewSet(ListModelMixin, GenericViewSet):
-    queryset = Job.objects.filter(is_active=True).order_by("-last_seen")
+    queryset = Job.objects.filter(is_active=True).order_by('-parsed_date', '-id')
     serializer_class = JobSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["company"]
@@ -16,7 +16,7 @@ class JobViewSet(ListModelMixin, GenericViewSet):
 
 def job_board(request):
     company_filter = request.GET.get("company")
-    jobs = Job.objects.filter(is_active=True).order_by("-last_seen")
+    jobs = Job.objects.filter(is_active=True).order_by("-parsed_date")
     
     if company_filter:
         jobs = jobs.filter(company=company_filter)

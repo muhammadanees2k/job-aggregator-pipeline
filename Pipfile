@@ -11,6 +11,7 @@ django-filter = "*"
 playwright = "*"
 dotenv = "*"
 beautifulsoup4 = "*"
+requests = "*"
 
 [dev-packages]
 

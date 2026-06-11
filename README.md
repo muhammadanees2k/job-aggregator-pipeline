@@ -1,140 +1,206 @@
-# Enterprise Job Aggregator Pipeline
+# Automated Job Aggregator & Scraping Pipeline
 
-An autonomous, cloud-native job aggregation engine designed to silently scrape, process, and serve job listings from highly secured enterprise career portals.
+A production-deployed Django backend that automatically collects, normalizes, stores, and serves job listings from company career portals. The project demonstrates real-world backend engineering: web scraping, data lifecycle tracking, REST APIs, admin observability, Linux automation, and AWS deployment.
 
-This project goes beyond simple web scraping by implementing anti-bot evasion techniques, robust cloud infrastructure, and a fully automated daily pipeline running on an AWS EC2 instance.
+## Overview
 
-## Live Demo & Endpoints
+This application aggregates active job listings from:
 
-You do not need to configure the project locally to see it in action. The scraper is currently running autonomously on a live AWS EC2 instance.
+- **Devsinc Careers** — collected through Workable's public job API.
+- **Systems Limited Careers** — collected through a Playwright-powered scraper for a dynamic SAP SuccessFactors career portal.
 
-* **Live Web Interface:** [http://54.153.209.192:8000](http://54.153.209.192:8000) 
-  The root URL serves a Django HTML template that dynamically renders the latest scraped job listings from both enterprise portals directly from the MySQL database.
-* **REST API Endpoint:** [http://54.153.209.192:8000/api/jobs](http://54.153.209.192:8000/api/jobs) 
-  Provides direct JSON access to the aggregated job data, demonstrating proper REST architecture for external frontend or mobile app consumption.
+Scraped jobs are stored in MySQL, exposed through Django REST Framework endpoints, displayed on a Django template frontend, and monitored through Django Admin.
 
-## Tech Stack & Architecture
+## Key Features
 
-* **Backend Framework:** Python, Django, Django REST Framework (DRF)
-* **Automation & Scraping:** Playwright (Headless Chromium), BeautifulSoup4
-* **Database:** MySQL
-* **Cloud Infrastructure:** AWS EC2 (t3.micro), Ubuntu Linux
-* **DevOps & CI/CD:** Linux Cron Jobs, Systemd Services, Custom Swap Memory Management
-* **Environment Management:** Pipenv
+- Automated scraping pipeline using **Python, Requests, Playwright, and BeautifulSoup**
+- Django management command for repeatable scraper execution
+- MySQL-backed job storage with duplicate prevention
+- Job lifecycle tracking using `last_seen` and `is_active`
+- Date normalization from raw scraped text into sortable date fields
+- REST API endpoint with filtering and search support
+- Responsive job board frontend
+- Django Admin dashboard for scraper logs and job monitoring
+- Linux cron automation running every 6 hours
+- Production deployment on AWS EC2 using **Nginx + Gunicorn + systemd**
+- Static file serving configured for production
 
-## Core Features
+## Tech Stack
 
-* **Advanced Stealth Scraping:** Bypasses enterprise-grade Web Application Firewalls (WAF) like Cloudflare using injected human-mask User-Agents and automation-flag suppression.
-* **Fully Autonomous Pipeline:** Utilizes a Linux `cron` daemon to trigger the extraction pipeline every 6 hours without human intervention.
-* **Resilient Cloud Deployment:** Runs 24/7 on an AWS EC2 instance. The Django web server is registered as a native Ubuntu `systemd` service, ensuring automatic restarts upon system reboots or unexpected crashes.
-* **Smart Database Management:** Automatically sanitizes the MySQL database by comparing new pulls against existing records, updating timestamps, and gracefully deactivating dead or expired job links.
-* **Hardware Optimized:** Custom-configured Linux Swap files to prevent Out-Of-Memory (OOM) kernel panics during high-intensity headless browser rendering on a micro-tier server.
+- **Backend:** Python, Django, Django REST Framework
+- **Scraping:** Playwright, BeautifulSoup, Requests
+- **Database:** MySQL
+- **Deployment:** AWS EC2, Ubuntu, Nginx, Gunicorn, systemd, Linux Cron
+- **Frontend:** Django Templates, HTML, CSS
 
-## Technical Challenges Conquered
+## Architecture
 
-During the development of this pipeline, several production-level challenges were solved:
-1. **The IP Reputation Block:** Enterprise career portals instantly blocked data-center IP addresses. Solved by injecting stealth configurations into Playwright to successfully mimic organic traffic.
-2. **The "OOM Killer" Crash:** Heavy headless browser operations overwhelmed the server's 1GB RAM limit, causing terminal disconnects. Solved by dropping down to the Linux kernel level to allocate 2GB of SSD storage as emergency Swap memory, stabilizing the server.
+```text
+Career Portals
+   ↓
+Scraper Command: python manage.py scrape_jobs
+   ↓
+Data Cleaning + Date Normalization
+   ↓
+MySQL Database
+   ↓
+Django ORM
+   ↓
+Django Template UI + REST API + Admin Dashboard
+```
 
-## Local Setup & Installation
+Production serving flow:
 
-If you wish to run this pipeline locally, follow these steps:
+```text
+Browser
+   ↓
+Nginx :80 / :8000
+   ↓
+Gunicorn 127.0.0.1:8001
+   ↓
+Django Application
+   ↓
+MySQL 127.0.0.1:3306
+```
 
-**1. Clone the repository**
+## Local Setup
+
+### 1. Clone the repository
 
 ```bash
-https://github.com/muhammadanees2k/job-aggregator-pipeline.git
+git clone https://github.com/YOUR_USERNAME/job-aggregator-pipeline.git
+cd job-aggregator-pipeline
 ```
 
-**2.  Install Pipenv (if not already installed)**
+### 2. Create and activate a virtual environment
 
-***On windows:***
-```python
-pip install pipenv
-```
-
-***On Ubuntu/Debian:***
 ```bash
-sudo apt install pipenv
+python -m venv venv
+source venv/bin/activate   # Linux/macOS
+# venv\Scripts\activate    # Windows
 ```
 
-**3. Initialize the Pipenv environment and install dependencies**
-```python
-pipenv install -r requirements.txt
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
 ```
 
-**4. Activate the virtual shell**
-```python
-pipenv shell
-```
+### 4. Install Playwright browser
 
-**5. Install Playwright browser binaries**
-```python
+```bash
 playwright install chromium
 ```
 
-**6. Database Configuration**
+### 5. Create `.env`
 
-Log into your local MySQL instance and create the database:
+Create a `.env` file in the project root:
 
-```sql
-CREATE DATABASE job_aggregator_db;
+```env
+DJANGO_SECRET_KEY=your-secret-key
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+DB_NAME=job_aggregator
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+DB_HOST=127.0.0.1
+DB_PORT=3306
 ```
 
-**7. Run database migrations**
-```python 
-python manage.py makemigrations
+Generate a Django secret key if needed:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+### 6. Run migrations
+
+```bash
 python manage.py migrate
 ```
 
-**8. Trigger the scraper manually**
-```python
+### 7. Run the scraper
+
+```bash
 python manage.py scrape_jobs
 ```
 
-**9. Start the local server**
-```python
+### 8. Start the development server
+
+```bash
 python manage.py runserver
 ```
 
+Open:
 
-## System Monitoring & Admin Dashboard
+```text
+http://127.0.0.1:8000/
+http://127.0.0.1:8000/api/jobs/
+http://127.0.0.1:8000/admin/
+```
 
-This project includes a fully configured Django Admin dashboard designed for production observability. It allows administrators to monitor scraper health, debug network timeouts, and manage job data without accessing the database directly.
+## API Usage
 
-### 1. Create an Admin Account
-To access the secure dashboard, generate a superuser credential in your terminal:
+List active jobs:
+
+```text
+GET /api/jobs/
+```
+
+Filter by company:
+
+```text
+GET /api/jobs/?company=Devsinc
+GET /api/jobs/?company=Systems Limited
+```
+
+Search by job title:
+
+```text
+GET /api/jobs/?search=Python
+```
+
+## Admin Monitoring
+
+Create an admin user:
+
 ```bash
 python manage.py createsuperuser
 ```
-I will ask for username and password. Provide that in best possible way.
 
-### 2. Access the Dashboard
+The Django Admin panel provides:
 
-Start your server (python manage.py runserver) and navigate to:
+- Job listing management
+- Active/inactive job visibility
+- Company/date filters
+- Searchable job records
+- Scraper execution logs
+- Success/failure tracking for scheduled runs
 
-```python 
-http://localhost:8000/admin
+## Production Notes
+
+The project is deployed on AWS EC2 using:
+
+- **Nginx** as the public reverse proxy
+- **Gunicorn** as the WSGI application server
+- **systemd** for process management
+- **cron** for scheduled scraping every 6 hours
+- **MySQL** as the persistent data store
+
+Cron command example:
+
+```bash
+0 */6 * * * cd /path/to/project && /path/to/venv/bin/python manage.py scrape_jobs >> scraper_cron.log 2>&1
 ```
 
-### 3. Dashboard Features
+## Future Improvements
 
-**Job Management:** View, filter (by company, active status, date), and search through all scraped job listings.
+- Containerize the application with Docker and Docker Compose
+- Add automated tests for scraper parsing, date normalization, and API endpoints
+- Add GitHub Actions for CI/CD
+- Replace cron with Celery + Redis for better task retries and monitoring
+- Add structured logging and alerting for scraper failures
+- Add HTTPS with a custom domain and Let's Encrypt
+- Add pagination metadata and ordering controls to the API
+- Add support for more company career portals
 
-**Scraper Logs (Audit Trail):** A secure, read-only system logging table. It tracks:
-
-1. The exact timestamp of every cron job execution.
-
-2. SUCCESS or FAILED execution states.
-
-3. The total number of new jobs successfully added to the database per run.
-
-4. Detailed Error Tracebacks: If the scraper encounters a WAF block, Cloudflare challenge, or DOM timeout, the exact Python traceback and HTTP response are caught and logged here for easy debugging.
-
-## Future Roadmap
-
-1. Integration of real-time email notifications for users when a new job matches their profile.
-
-2. Building a full REST API suite using Django REST Framework for mobile app consumption.
-
-3. Implementing proxy rotation for even higher scraping resilience.

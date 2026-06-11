@@ -11,3 +11,9 @@ env/
 
 # Playwright
 scraper.log
+# Runtime logs and generated files
+*.log
+project_content.txt
+devsinc_timeout.html
+devsinc_debug.html
+staticfiles/
